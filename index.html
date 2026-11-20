@@ -1,0 +1,509 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Musae Puzzle 3x3</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            color: white;
+            background: linear-gradient(135deg, #17152c, #39315c);
+        }
+
+        .container {
+            width: 100%;
+            max-width: 550px;
+            padding: 22px;
+            text-align: center;
+            background: #25213d;
+            border-radius: 18px;
+        }
+
+        h1 {
+            color: #f5d68b;
+        }
+
+        .info {
+            display: flex;
+            justify-content: space-around;
+            gap: 8px;
+            margin: 20px 0;
+        }
+
+        .info-box {
+            flex: 1;
+            padding: 12px 5px;
+            background: #393354;
+            border-radius: 10px;
+        }
+
+        .info-box p {
+            margin: 5px;
+            color: #c8c2d9;
+            font-size: 13px;
+        }
+
+        .info-box span {
+            color: #f5d68b;
+            font-size: 21px;
+            font-weight: bold;
+        }
+
+        #time {
+            color: #ff7777;
+        }
+
+        #puzzle {
+            width: min(100%, 420px);
+            aspect-ratio: 1;
+            margin: 20px auto;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 4px;
+            padding: 4px;
+            background: #f5d68b;
+            border-radius: 10px;
+        }
+
+        .tile {
+            overflow: hidden;
+            border: 2px solid #f5d68b;
+            border-radius: 5px;
+            cursor: grab;
+            background: #393354;
+            touch-action: manipulation;
+        }
+
+        .tile.selected {
+            outline: 4px solid white;
+            outline-offset: -4px;
+        }
+
+        .piece-image {
+            width: 100%;
+            height: 100%;
+            background-repeat: no-repeat;
+            transition: transform 0.25s;
+        }
+
+        button {
+            margin: 5px;
+            padding: 12px 22px;
+            border: none;
+            border-radius: 8px;
+            background: #d9ad61;
+            color: #211a2e;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #f5d68b;
+        }
+
+        #message {
+            min-height: 25px;
+            color: #f5d68b;
+            font-weight: bold;
+        }
+
+        .progress {
+            height: 12px;
+            margin-top: 15px;
+            overflow: hidden;
+            background: #48415f;
+            border-radius: 10px;
+        }
+
+        #progressBar {
+            width: 0%;
+            height: 100%;
+            background: #d9ad61;
+            transition: width 0.2s;
+        }
+
+        .guide {
+            color: #c8c2d9;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+
+        <h1>✦ MUSAE PUZZLE ✦</h1>
+
+        <p id="pictureName">Nhấn Bắt đầu để chơi</p>
+
+        <div class="info">
+
+            <div class="info-box">
+                <p>Thời gian</p>
+                <span id="time">01:00</span>
+            </div>
+
+            <div class="info-box">
+                <p>Số lượt</p>
+                <span id="moves">0</span>
+            </div>
+
+            <div class="info-box">
+                <p>Kỷ lục</p>
+                <span id="best">--:--</span>
+            </div>
+
+        </div>
+
+        <div id="puzzle"></div>
+
+        <div class="progress">
+            <div id="progressBar"></div>
+        </div>
+
+        <p id="progressText">Hoàn thành: 0/9</p>
+
+        <button onclick="startGame()">Bắt đầu</button>
+        <button onclick="startGame()">Chơi lại</button>
+
+        <p id="message">
+            Máy sẽ tự chọn một trong 5 bức tranh.
+        </p>
+
+        <p class="guide">
+            Kéo thả hai ô để đổi vị trí.<br>
+            Hoặc nhấn lần lượt hai ô để đổi chỗ.<br>
+            Nhấn đúp một ô để xoay 90° theo chiều kim đồng hồ.<br>
+            Hoàn thành trong 60 giây!
+        </p>
+
+    </div>
+
+    <script>
+        const pictures = [
+            { name: "Limbus Company", src: "anh1.jpg" },
+            { name: "Reverse: 1999", src: "anh2.jpg" },
+            { name: "Nhân vật áo xanh", src: "anh3.jpg" },
+            { name: "Gregor Plushie", src: "anh4.jpg" },
+            { name: "Black Armor", src: "anh5.jpg" }
+        ];
+
+        const puzzle = document.getElementById("puzzle");
+        const timeDisplay = document.getElementById("time");
+        const movesDisplay = document.getElementById("moves");
+        const bestDisplay = document.getElementById("best");
+        const message = document.getElementById("message");
+        const pictureName = document.getElementById("pictureName");
+        const progressBar = document.getElementById("progressBar");
+        const progressText = document.getElementById("progressText");
+
+        let board = [];
+        let currentPicture = null;
+        let selectedTile = null;
+        let lastTap = { index: -1, time: 0 };
+
+        let moves = 0;
+        let seconds = 60;
+        let timer = null;
+        let playing = false;
+
+        let best = Number(localStorage.getItem("musaeBest")) || 0;
+
+        bestDisplay.textContent = best ? formatTime(best) : "--:--";
+
+        function formatTime(value) {
+            const minutes = Math.floor(value / 60);
+            const secs = value % 60;
+
+            return String(minutes).padStart(2, "0") + ":" +
+                   String(secs).padStart(2, "0");
+        }
+
+        function stopTimer() {
+            clearInterval(timer);
+            timer = null;
+            playing = false;
+        }
+
+        function startTimer() {
+            stopTimer();
+
+            seconds = 60;
+            playing = true;
+
+            timeDisplay.textContent = formatTime(seconds);
+
+            timer = setInterval(function () {
+                seconds--;
+
+                timeDisplay.textContent = formatTime(seconds);
+
+                if (seconds <= 0) {
+                    stopTimer();
+                    message.textContent = "HẾT GIỜ! Hãy chơi lại nhé!";
+                    renderPuzzle();
+                }
+            }, 1000);
+        }
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        function startGame() {
+            stopTimer();
+
+            let nextPicture;
+
+            do {
+                nextPicture = pictures[
+                    Math.floor(Math.random() * pictures.length)
+                ];
+            } while (
+                pictures.length > 1 &&
+                nextPicture === currentPicture
+            );
+
+            currentPicture = nextPicture;
+
+            pictureName.textContent =
+                "Ảnh đang chơi: " + currentPicture.name;
+
+            board = [];
+
+            for (let i = 0; i < 9; i++) {
+                board.push({
+                    id: i,
+                    rotation: Math.floor(Math.random() * 4) * 90
+                });
+            }
+
+            shuffleArray(board);
+
+            if (isSolved()) {
+                board[0].rotation = 90;
+            }
+
+            moves = 0;
+            selectedTile = null;
+            lastTap = { index: -1, time: 0 };
+
+            movesDisplay.textContent = "0";
+
+            renderPuzzle();
+
+            message.textContent = "Bắt đầu! Bạn có 60 giây!";
+
+            startTimer();
+        }
+
+        function renderPuzzle() {
+            puzzle.innerHTML = "";
+
+            board.forEach(function (piece, index) {
+                const tile = document.createElement("div");
+                const image = document.createElement("div");
+
+                tile.className = "tile";
+
+                if (selectedTile === index) {
+                    tile.classList.add("selected");
+                }
+
+                image.className = "piece-image";
+
+                const row = Math.floor(piece.id / 3);
+                const col = piece.id % 3;
+
+                image.style.backgroundImage =
+                    `url("${currentPicture.src}")`;
+
+                image.style.backgroundSize = "300% 300%";
+
+                image.style.backgroundPosition =
+                    `${col * 50}% ${row * 50}%`;
+
+                image.style.transform =
+                    `rotate(${piece.rotation}deg)`;
+
+                tile.appendChild(image);
+
+                tile.draggable = playing;
+
+                tile.addEventListener("click", function () {
+                    handleClick(index);
+                });
+
+                tile.addEventListener("dragstart", function (event) {
+                    if (!playing) {
+                        event.preventDefault();
+                        return;
+                    }
+
+                    event.dataTransfer.setData(
+                        "text/plain",
+                        String(index)
+                    );
+                });
+
+                tile.addEventListener("dragover", function (event) {
+                    event.preventDefault();
+                });
+
+                tile.addEventListener("drop", function (event) {
+                    event.preventDefault();
+
+                    const from = Number(
+                        event.dataTransfer.getData("text/plain")
+                    );
+
+                    if (Number.isInteger(from)) {
+                        swapTiles(from, index);
+                    }
+                });
+
+                puzzle.appendChild(tile);
+            });
+
+            updateProgress();
+        }
+
+        function handleClick(index) {
+            if (!playing) return;
+
+            const now = Date.now();
+
+            if (
+                lastTap.index === index &&
+                now - lastTap.time < 350
+            ) {
+                rotateTile(index);
+                selectedTile = null;
+                lastTap = { index: -1, time: 0 };
+                renderPuzzle();
+                return;
+            }
+
+            lastTap = { index: index, time: now };
+
+            if (selectedTile === null) {
+                selectedTile = index;
+                renderPuzzle();
+                return;
+            }
+
+            if (selectedTile === index) {
+                selectedTile = null;
+                renderPuzzle();
+                return;
+            }
+
+            const first = selectedTile;
+
+            selectedTile = null;
+
+            swapTiles(first, index);
+        }
+
+        function rotateTile(index) {
+            if (!playing) return;
+
+            board[index].rotation =
+                (board[index].rotation + 90) % 360;
+
+            moves++;
+            movesDisplay.textContent = moves;
+
+            renderPuzzle();
+            checkWin();
+        }
+
+        function swapTiles(a, b) {
+            if (!playing || a === b) return;
+
+            [board[a], board[b]] = [board[b], board[a]];
+
+            selectedTile = null;
+
+            moves++;
+            movesDisplay.textContent = moves;
+
+            renderPuzzle();
+            checkWin();
+        }
+
+        function updateProgress() {
+            let correct = 0;
+
+            board.forEach(function (piece, index) {
+                if (
+                    piece.id === index &&
+                    piece.rotation === 0
+                ) {
+                    correct++;
+                }
+            });
+
+            progressBar.style.width =
+                (correct / 9 * 100) + "%";
+
+            progressText.textContent =
+                "Hoàn thành: " + correct + "/9";
+        }
+
+        function isSolved() {
+            return board.length === 9 &&
+                board.every(function (piece, index) {
+                    return piece.id === index &&
+                        piece.rotation === 0;
+                });
+        }
+
+        function checkWin() {
+            if (!isSolved()) return;
+
+            stopTimer();
+
+            message.textContent =
+                "CHÚC MỪNG! BẠN ĐÃ HOÀN THÀNH!";
+
+            const usedTime = 60 - seconds;
+
+            if (!best || usedTime < best) {
+                best = usedTime;
+
+                localStorage.setItem("musaeBest", best);
+
+                bestDisplay.textContent = formatTime(best);
+            }
+
+            renderPuzzle();
+        }
+
+        renderPuzzle();
+
+    </script>
+
+</body>
+</html>
